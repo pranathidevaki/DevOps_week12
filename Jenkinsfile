@@ -30,15 +30,21 @@ pipeline {
             steps {
                 bat 'kubectl apply -f deployment.yaml'
                 bat 'kubectl apply -f service.yaml'
-                bat 'kubectl rollout restart deployment/week12app-deployment'
-                bat 'kubectl rollout status deployment/week12app-deployment --timeout=120s'
+                // replace the old pod so the new image is used, then wait until it is Ready
+                bat 'kubectl delete pod -l app=week12app'
+                bat 'kubectl wait --for=condition=Ready pod -l app=week12app --timeout=120s'
             }
         }
         stage('Run Selenium Tests with pytest') {
             steps {
-                echo 'Testing the app running on Kubernetes (NodePort 30120)'
+                echo 'Testing the app running on Kubernetes (port 30120)'
                 bat 'python -m pip install -r requirements.txt'
-                bat 'python -m pytest -v tests'
+                // forward localhost:30120 to the service, wait, then run the tests
+                bat '''
+                    start /B kubectl port-forward service/week12app-service 30120:5000
+                    ping 127.0.0.1 -n 6 > nul
+                    python -m pytest -v tests
+                '''
             }
         }
     }
